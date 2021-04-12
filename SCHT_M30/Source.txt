@@ -1,0 +1,92 @@
+
+
+cyhal_i2c_t i2c;
+cyhal_i2c_cfg_t i2c_cfg = {
+    .is_slave = false,
+    .address = 0,
+    .frequencyhal_hz = 100000
+};
+
+#define LIGHT_SENSOR_PIN (CYBSP_A0)
+#define IMU_I2C_SDA (CYBSP_I2C_SDA)
+#define IMU_I2C_SCL (CYBSP_I2C_SCL)
+
+static void i2c_init(void)
+{
+	cy_rslt_t result;
+
+    /* Initialize i2c for motion sensor */
+    result = cyhal_i2c_init(&i2c, IMU_I2C_SDA, IMU_I2C_SCL, NULL);
+    CY_ASSERT(result == CY_RSLT_SUCCESS);
+    result = cyhal_i2c_configure(&i2c, &i2c_cfg);
+    CY_ASSERT(result == CY_RSLT_SUCCESS);
+}
+
+
+#define SCHT_M30_ADRESS 0x44
+typedef enum _SCHT_M30_CMD
+{
+	SCHT_M30_RESET,
+	READ_STATUS,
+	SENSOR_READ,
+	CLEAR_STATUS,
+	SENSOR_MEASURE
+}SCHT_M30_CMD;
+
+static void SCHT_M30_CMD_Write(SCHT_M30_CMD cmd)
+{
+	uint8_t cmd_buf[3];
+	switch(cmd)
+	{
+	case SCHT_M30_RESET:
+		cmd_buf[0]=0x30;
+		cmd_buf[1]=0xA2;
+		cyhal_i2c_master_write(&i2c, SCHT_M30_ADRESS, cmd_buf, 2, 0, false);
+		break;
+
+	case READ_STATUS:
+		cmd_buf[0]=0xF3;
+		cmd_buf[1]=0x2D;
+		cyhal_i2c_master_write(&i2c, SCHT_M30_ADRESS, cmd_buf, 2, 0, false);
+		break;
+
+	case SENSOR_READ:
+		cmd_buf[0]=0xE0;
+		cmd_buf[1]=0x00;
+		cyhal_i2c_master_write(&i2c, SCHT_M30_ADRESS, cmd_buf, 2, 0, false);
+		break;
+
+	case CLEAR_STATUS:
+		cmd_buf[0]=0x30;
+		cmd_buf[1]=0x41;
+		cyhal_i2c_master_write(&i2c, SCHT_M30_ADRESS, cmd_buf, 2, 0, false);
+		break;
+
+	case SENSOR_MEASURE:
+		cmd_buf[0]=0x2c;
+		cmd_buf[1]=0x06;
+		cyhal_i2c_master_write(&i2c, SCHT_M30_ADRESS, cmd_buf, 2, 0, false);
+		break;
+	}
+}
+
+static void SCHT_M30_Read(void)
+{
+	uint8_t data[6]={0,};
+	int temp=0;
+	uint8_t cTemp=0;
+	uint8_t fTemp=0;
+	uint8_t humidity=0;
+
+	SCHT_M30_CMD_Write(SENSOR_MEASURE);
+
+	cyhal_i2c_master_read(&i2c, SCHT_M30_ADRESS, data, 6, 0, false);
+
+	temp = (data[0] * 256 + data[1]);
+	cTemp = ( (175 * temp / 65535)-45);
+	fTemp = ( (315 * temp / 65535)-49);
+	humidity = 100 * (data[3] * 256 + data[4]) / 65535;
+
+	sys_Data.d_Sens.temp.val[0]=cTemp;
+	sys_Data.d_Sens.humi.val[0]=humidity;
+}
